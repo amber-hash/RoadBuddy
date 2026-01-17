@@ -8,14 +8,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.presagetech.smartspectra.SmartSpectraSdk
-import com.presagetech.smartspectra.SmartSpectraView
+import com.presagetech.smartspectra.SmartSpectraButton
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var smartSpectraView: SmartSpectraView
 
-    // Replace with your API key from https://physiology.presagetech.com
     private val smartSpectraSdk = SmartSpectraSdk.getInstance().apply {
-        setApiKey("us3FiOqzMByIPAxFlBNM9WwQlPDINUG1STdcp191")
+        setApiKey(BuildConfig.PERSAGE_KEY)
     }
 
     private val requestPermissionLauncher =
@@ -36,8 +34,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        smartSpectraView = findViewById(R.id.smart_spectra_view)
 
         checkPermissions()
     }
