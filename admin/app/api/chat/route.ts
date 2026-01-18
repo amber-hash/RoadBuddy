@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const body = JSON.parse(rawBody);
     console.log("Parsed body:", body);
     let message = body?.message;
-    const driverState = body?.driverState; // "drowsy", "asleep", or "alert"
+    const driverState = body?.driverState; // "drowsy", "asleep", or "normal"
     const conversationHistory = body?.conversationHistory || [];
 
     // Handle asleep driver state
@@ -92,7 +92,7 @@ IMPORTANT:
         userMessage = `The driver just said: "${message}"`;
       }
     } else {
-      systemPrompt = `You are RoadBuddy, a friendly AI companion for truck drivers. The driver is currently ${driverState || "alert"}. Have a natural, engaging conversation. Keep responses SHORT (1-2 sentences max).`;
+      systemPrompt = `You are RoadBuddy, a friendly AI companion for truck drivers. The driver is currently ${driverState || "normal"}. Have a natural, engaging conversation. Keep responses SHORT (1-2 sentences max).`;
       userMessage = message;
     }
 
