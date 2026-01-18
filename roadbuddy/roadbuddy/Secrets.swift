@@ -1,3 +1,3 @@
 struct Secrets {
-    static let apiKey = "wRrlBfykPo1l5V4HbwKE67QQpuWmNkNG2vxeaHaM"
+    static let apiKey = "3BdtUAT4kY6KMEKXtdCqb2czkptw4Bbg8wGvtVqh"
 }

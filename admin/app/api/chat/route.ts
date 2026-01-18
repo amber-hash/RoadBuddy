@@ -6,8 +6,20 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runtime = "nodejs";
+export const maxDuration = 60; // 60 second timeout (Vercel Pro max)
+
+// Utility: Timeout promise
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
 
 export async function POST(req: NextRequest) {
+  const startTime = Date.now();
   try {
     console.log("=== Starting chat request ===");
     console.log("Environment check:");
@@ -96,8 +108,8 @@ IMPORTANT:
       userMessage = message;
     }
 
-    // --- Gemini API ---
-    console.log("Calling Gemini API...");
+    // --- Gemini API with timeout ---
+    console.log("Calling Gemini API (30s timeout)...");
     console.log("Driver State:", driverState || "normal");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
@@ -105,23 +117,51 @@ IMPORTANT:
       systemInstruction: systemPrompt
     });
 
-    const result = await model.generateContent(userMessage);
-    const response = await result.response;
-    const replyText = response.text();
-    console.log("Gemini response:", replyText.substring(0, 100) + "...");
+    let replyText: string;
+    try {
+      const result = await withTimeout(
+        model.generateContent(userMessage),
+        30000 // 30 second timeout for Gemini
+      );
+      const response = await result.response;
+      replyText = response.text();
+      console.log("Gemini response:", replyText.substring(0, 100) + "...");
+      console.log("Gemini elapsed:", Date.now() - startTime, "ms");
+    } catch (geminiError) {
+      console.error("❌ Gemini API error:", geminiError);
+      // Fallback response if Gemini fails
+      replyText = "Hey, I noticed you seem a bit tired. Are you doing okay? Let's keep you alert!";
+      console.log("Using fallback response");
+    }
 
-    // --- ElevenLabs SDK ---
-    console.log("Calling ElevenLabs API...");
+    // --- ElevenLabs SDK with timeout ---
+    console.log("Calling ElevenLabs API (20s timeout)...");
     const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
     const elevenClient = new ElevenLabsClient({
       apiKey: process.env.ELEVENLABS_API_KEY!,
     });
 
-    const audioStream = await elevenClient.textToSpeech.convert(voiceId, {
-      text: replyText,
-      modelId: "eleven_multilingual_v2",
-    });
-    console.log("ElevenLabs stream received");
+    let audioStream: any;
+    try {
+      audioStream = await withTimeout(
+        elevenClient.textToSpeech.convert(voiceId, {
+          text: replyText,
+          modelId: "eleven_multilingual_v2",
+        }),
+        20000 // 20 second timeout for ElevenLabs
+      );
+      console.log("ElevenLabs stream received");
+      console.log("ElevenLabs elapsed:", Date.now() - startTime, "ms");
+    } catch (elevenError) {
+      console.error("❌ ElevenLabs API error:", elevenError);
+      return NextResponse.json(
+        {
+          error: "Text-to-speech failed",
+          details: elevenError instanceof Error ? elevenError.message : String(elevenError)
+        },
+        { status: 503 }
+      );
+    }
 
     // --- Save audio to temp directory ---
     const fileName = `reply-${Date.now()}.mp3`;
@@ -150,13 +190,27 @@ IMPORTANT:
     });
 
   } catch (error) {
+    const elapsed = Date.now() - startTime;
     console.error("POST /api/chat error:", error);
-    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
     console.error("Error message:", error instanceof Error ? error.message : String(error));
+    console.error("Total elapsed:", elapsed, "ms");
+    
+    // Handle timeout errors specifically
+    if (error instanceof Error && error.message.includes("Timeout")) {
+      return NextResponse.json(
+        {
+          error: "Request timeout - AI service took too long to respond",
+          details: error.message
+        },
+        { status: 504 }
+      );
+    }
+    
     return NextResponse.json(
       {
         error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error)
+        details: error instanceof Error ? error.message : String(error),
+        elapsed
       },
       { status: 500 }
     );
