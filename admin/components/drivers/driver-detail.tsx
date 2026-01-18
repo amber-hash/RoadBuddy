@@ -1,8 +1,8 @@
 "use client"
 
 import { useMemo, useState, useEffect } from "react"
+import dynamic from "next/dynamic"
 import { useTruckStore } from "@/hooks/use-truck-store"
-import { TruckMap } from "@/components/map/truck-map"
 import { formatRelativeTime, formatTime } from "@/lib/utils/time"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,19 @@ const stateTextColors: Record<DriverState, string> = {
   Asleep: "text-red-600",
 }
 
+// Dynamically import the map component to avoid SSR issues with Leaflet
+const TruckMapLeaflet = dynamic(
+  () => import("@/components/map/truck-map-leaflet").then((mod) => mod.TruckMapLeaflet),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full bg-slate-900 rounded-lg flex items-center justify-center">
+        <p className="text-white text-sm">Loading map...</p>
+      </div>
+    )
+  }
+)
+
 interface DriverDetailProps {
   driverId: string
 }
@@ -32,7 +45,8 @@ export function DriverDetail({ driverId }: DriverDetailProps) {
   const [statusHistory, setStatusHistory] = useState<StateChange[]>([])
 
   const driver = useMemo(() => {
-    return Array.from(trucks.values()).find((t) => t.driver_id === driverId)
+    // Try to find by truck_id (vehicle_id) first, then fall back to driver_id
+    return trucks.get(driverId) || Array.from(trucks.values()).find((t) => t.driver_id === driverId)
   }, [trucks, driverId])
 
   // Simulate status history
@@ -193,7 +207,7 @@ export function DriverDetail({ driverId }: DriverDetailProps) {
         </CardHeader>
         <CardContent>
           <div className="h-[300px] rounded-lg overflow-hidden">
-            <TruckMap singleTruck={driver} showControls={false} />
+            <TruckMapLeaflet singleTruck={driver} showControls={false} />
           </div>
         </CardContent>
       </Card>
