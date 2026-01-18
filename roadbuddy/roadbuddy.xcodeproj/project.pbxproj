@@ -267,6 +267,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to measure your vitals.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to map your status on the dashboard.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "RoadBuddy needs microphone access to record your voice during safety conversations when drowsiness is detected.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "RoadBuddy uses speech recognition to listen to driver responses during drowsiness alerts. Your voice is processed locally on your device to keep you alert and safe while driving.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -301,6 +303,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need camera access to measure your vitals.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "We need your location to map your status on the dashboard.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "RoadBuddy needs microphone access to record your voice during safety conversations when drowsiness is detected.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "RoadBuddy uses speech recognition to listen to driver responses during drowsiness alerts. Your voice is processed locally on your device to keep you alert and safe while driving.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -8,6 +8,9 @@ struct ContentView: View {
     @ObservedObject var sdk = SmartSpectraSwiftSDK.shared
     @StateObject var locationManager = LocationManager()
     @StateObject var drowsinessDetector = DrowsinessDetector()
+    @StateObject var voiceAssistant = VoiceAssistant()
+    
+    @State private var previousDrowsyState = false
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -107,6 +110,17 @@ struct ContentView: View {
             lat: lat,
             lon: lon
         )
+        
+        // Trigger voice assistant when drowsy detected
+        let isDrowsy = state.lowercased() == "drowsy" || state.lowercased() == "asleep"
+        if isDrowsy && !previousDrowsyState {
+            print("🎯 Drowsiness detected! Starting voice assistant conversation.")
+            voiceAssistant.startDrowsyConversation(driverState: state)
+        } else if !isDrowsy && previousDrowsyState {
+            print("✓ Driver no longer drowsy. Stopping conversation.")
+            voiceAssistant.endDrowsyConversation()
+        }
+        previousDrowsyState = isDrowsy
         
     }
 }
