@@ -277,5 +277,4 @@ export function DriverDetail({ driverId }: DriverDetailProps) {
       </Card>
     </div>
   )
-
 }
