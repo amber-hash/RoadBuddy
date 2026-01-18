@@ -1,7 +1,7 @@
 import { addClient, removeClient } from "@/lib/sse"
 
 export const maxDuration = 60; // 60 seconds max for Vercel Pro
-
+export const runtime = "edge";
 export async function GET() {
   const encoder = new TextEncoder()
 
