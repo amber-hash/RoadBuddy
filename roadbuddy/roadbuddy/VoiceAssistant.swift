@@ -24,6 +24,9 @@ class VoiceAssistant: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private let networkManager = NetworkManager.shared
     private var currentDriverState = "Normal"
     
+    // Vercel deployment base URL
+    private let baseURL = "https://road-buddy-67nvyiltt-ambers-projects-bc58a612.vercel.app"
+    
     override init() {
         super.init()
         print("🔧 [INIT] VoiceAssistant initializing...")
@@ -151,8 +154,9 @@ class VoiceAssistant: NSObject, ObservableObject, AVAudioPlayerDelegate {
             "driverState": driverState
         ]
         
-        guard let url = URL(string: "http://10.206.38.172:3000/api/chat") else {
-            print("❌ [API] Invalid chat URL")
+        let chatURL = "\(baseURL)/api/chat"
+        guard let url = URL(string: chatURL) else {
+            print("❌ [API] Invalid chat URL: \(chatURL)")
             return
         }
         
@@ -212,7 +216,12 @@ class VoiceAssistant: NSObject, ObservableObject, AVAudioPlayerDelegate {
     
     // MARK: - Audio Playback
     private func playAudio(from audioUrl: String) {
-        guard let fullUrl = URL(string: "http://10.206.38.172:3000\(audioUrl)") else {
+        // If audioUrl is relative, prepend base URL
+        let fullAudioUrlString = audioUrl.hasPrefix("http") ? 
+            audioUrl : 
+            "\(baseURL)\(audioUrl)"
+        
+        guard let fullUrl = URL(string: fullAudioUrlString) else {
             print("❌ [AUDIO] Invalid audio URL: \(audioUrl)")
             return
         }
