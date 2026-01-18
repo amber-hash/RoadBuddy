@@ -35,6 +35,18 @@ export async function POST(req: NextRequest) {
     console.log("Parsed body:", body);
     let message = body?.message;
     const driverState = body?.driverState;
+    const conversationHistory = body?.conversationHistory || [];
+
+    // Handle emergency: driver asleep
+    if (driverState === "asleep") {
+      console.log("🚨 DRIVER ASLEEP - Initiating emergency protocol");
+      return NextResponse.json({
+        reply: "EMERGENCY: Driver detected asleep! Alerting now!",
+        audioUrl: null,
+        driverState: "emergency",
+        isEmergency: true
+      }, { status: 200 });
+    }
 
     // Auto-start conversation when drowsiness is detected
     if (driverState === "drowsy" && (!message || message.trim() === "")) {
