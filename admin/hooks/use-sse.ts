@@ -19,143 +19,158 @@ export function useSSE() {
     lastUpdate: null,
   })
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const trucksRef = useRef<Map<string, TruckData>>(new Map())
 
   const fetchDrivers = useCallback(async () => {
     try {
-      const response = await fetch('/api/drivers')
-      if (!response.ok) throw new Error('Failed to fetch drivers')
-      const drivers: DriverResponse[] = await response.json()
-      
-      const trucksMap = new Map<string, TruckData>()
-      const initialNotifications: Notification[] = []
-      
+      const res = await fetch("/api/drivers")
+      if (!res.ok) {
+        console.error('Failed to fetch drivers:', res.status, res.statusText)
+        return
+      }
+
+      const drivers: DriverResponse[] = await res.json()
+      console.log('Fetched drivers:', drivers)
+
+      const map = new Map<string, TruckData>()
+
       drivers.forEach((driver, index) => {
-        // Since API only returns partial data, we still simulate some fields for the UI
-        // In a real app, these should come from the DB too
-        const truckData: TruckData = {
-          truck_id: driver.vehicle_id,
-          driver_id: `${index + 1}`, // Generate a driver ID since it's not in the DB
+        // Convert vehicle_id to string for consistent map keys
+        const vehicleId = String(driver.vehicle_id)
+        map.set(vehicleId, {
+          truck_id: vehicleId,
+          driver_id: String(index + 1),
           driver_name: driver.name,
           driver_state: driver.state,
-          lat: 34.0522 + (Math.random() - 0.5) * 2,
-          long: -118.2437 + (Math.random() - 0.5) * 2,
+          lat: 0,
+          long: 0,
           lastUpdate: new Date(),
-          phone: `(555) ${String(Math.floor(Math.random() * 900) + 100)}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-          license: `CDL-${String(Math.floor(Math.random() * 900000) + 100000)}`,
-          joinedDate: `${["Jan", "Feb", "Mar", "Apr", "May", "Jun"][Math.floor(Math.random() * 6)]} 202${Math.floor(Math.random() * 4) + 1}`,
-        }
-
-        trucksMap.set(truckData.truck_id, truckData)
-
-        if (truckData.driver_state !== "Normal") {
-          initialNotifications.push({
-            id: `${truckData.truck_id}-${Date.now()}`,
-            truck_id: truckData.truck_id,
-            driver_id: truckData.driver_id,
-            driver_name: truckData.driver_name,
-            state: truckData.driver_state,
-            timestamp: new Date(),
-            lat: truckData.lat,
-            long: truckData.long,
-            acknowledged: false,
-          })
-        }
+          phone: "",
+          license: "",
+          joinedDate: "",
+        })
       })
 
-      trucksRef.current = trucksMap
-      setState({
-        trucks: trucksMap,
-        notifications: initialNotifications,
-        connected: true,
-        lastUpdate: new Date(),
-      })
-
+      trucksRef.current = map
+      setState(prev => ({ ...prev, trucks: map }))
+      console.log('Loaded trucks into store:', map.size, 'trucks')
     } catch (error) {
-      console.error('Error initializing data:', error)
+      console.error('Error fetching drivers:', error)
     }
   }, [])
 
-  const simulateRealtimeUpdates = useCallback(() => {
-    intervalRef.current = setInterval(() => {
-      const trucks = trucksRef.current
-      const truckArray = Array.from(trucks.values())
+  /**
+   * 2️⃣ Live SSE updates
+   */
+  const startSSE = useCallback(() => {
+    const source = new EventSource("/api/drivers/sse")
 
-      if (truckArray.length === 0) return
+    source.onopen = () => {
+      console.log('[SSE] Connected to event stream')
+      setState(prev => ({ ...prev, connected: true }))
+    }
 
-      // Randomly update 1-3 trucks
-      const updateCount = Math.floor(Math.random() * 3) + 1
-      const newNotifications: Notification[] = []
+    source.onmessage = (event) => {
+      console.log('[SSE] Received message:', event.data)
 
-      for (let i = 0; i < updateCount; i++) {
-        const randomIndex = Math.floor(Math.random() * truckArray.length)
-        const truck = truckArray[randomIndex]
-
-        // Update position slightly
-        const updatedTruck: TruckData = {
-          ...truck,
-          lat: truck.lat + (Math.random() - 0.5) * 0.01,
-          long: truck.long + (Math.random() - 0.5) * 0.01,
-          lastUpdate: new Date(),
-        }
-
-        // Occasionally change state
-        if (Math.random() < 0.1) {
-          const states: DriverState[] = ["Normal", "Drowsy", "Asleep"]
-          const newState = states[Math.floor(Math.random() * states.length)]
-
-          if (newState !== truck.driver_state) {
-            updatedTruck.driver_state = newState
-
-            if (newState !== "Normal") {
-              newNotifications.push({
-                id: `${truck.truck_id}-${Date.now()}`,
-                truck_id: truck.truck_id,
-                driver_id: truck.driver_id,
-                driver_name: truck.driver_name,
-                state: newState,
-                timestamp: new Date(),
-                lat: updatedTruck.lat,
-                long: updatedTruck.long,
-                acknowledged: false,
-              })
-            }
-          }
-        }
-
-        trucks.set(truck.truck_id, updatedTruck)
+      let msg
+      try {
+        msg = JSON.parse(event.data)
+      } catch (error) {
+        console.log('[SSE] Non-JSON message (heartbeat or comment):', event.data)
+        return
       }
 
-      trucksRef.current = trucks
+      if (msg.type !== "DRIVER_TELEMETRY") {
+        console.log('[SSE] Ignoring non-telemetry message:', msg.type)
+        return
+      }
 
-      setState((prev) => ({
+      console.log('[SSE] Processing telemetry for driver:', msg.driver_id)
+
+      // Find truck by vehicle_id (which matches driver_id in the message)
+      // Convert to string to ensure consistent map key type
+      const driverId = String(msg.driver_id)
+      const existing = trucksRef.current.get(driverId)
+      if (!existing) {
+        console.warn(`[SSE] Received update for unknown driver: ${msg.driver_id}. Available drivers:`, Array.from(trucksRef.current.keys()))
+        return
+      }
+
+      const updated: TruckData = {
+        ...existing,
+        lat: msg.location.lat,
+        long: msg.location.lon,
+        driver_state: msg.state,
+        lastUpdate: new Date(),
+      }
+
+      console.log('[SSE] Updated truck data:', updated)
+
+      const newTrucks = new Map(trucksRef.current)
+      newTrucks.set(driverId, updated)
+      trucksRef.current = newTrucks
+
+      const notifications: Notification[] = []
+
+      if (
+        updated.driver_state !== "Normal" &&
+        updated.driver_state !== existing.driver_state
+      ) {
+        console.log('[SSE] State change detected:', existing.driver_state, '->', updated.driver_state)
+        notifications.push({
+          id: `${updated.truck_id}-${Date.now()}`,
+          truck_id: updated.truck_id,
+          driver_id: updated.driver_id,
+          driver_name: updated.driver_name,
+          state: updated.driver_state,
+          timestamp: new Date(),
+          lat: updated.lat,
+          long: updated.long,
+          acknowledged: false,
+        })
+      }
+
+      setState(prev => ({
         ...prev,
-        trucks: new Map(trucks),
-        notifications: [...newNotifications, ...prev.notifications].slice(0, 100),
+        trucks: newTrucks,
+        notifications: [...notifications, ...prev.notifications].slice(0, 100),
         lastUpdate: new Date(),
       }))
-    }, 3000)
+
+      console.log('[SSE] State updated, total trucks:', newTrucks.size)
+    }
+
+    source.onerror = (error) => {
+      console.error('[SSE] Connection error:', error)
+      setState(prev => ({ ...prev, connected: false }))
+      source.close()
+    }
+
+    return source
   }, [])
 
+  /**
+   * 3️⃣ Lifecycle
+   */
   useEffect(() => {
-    // Initial fetch
+    let source: EventSource | null = null
+
     fetchDrivers().then(() => {
-      // Start simulation after data is loaded
-      simulateRealtimeUpdates()
+      source = startSSE()
     })
 
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
+      source?.close()
     }
-  }, [fetchDrivers, simulateRealtimeUpdates])
+  }, [fetchDrivers, startSSE])
 
   const acknowledgeNotification = useCallback((id: string) => {
-    setState((prev) => ({
+    setState(prev => ({
       ...prev,
-      notifications: prev.notifications.map((n) => (n.id === id ? { ...n, acknowledged: true } : n)),
+      notifications: prev.notifications.map(n =>
+        n.id === id ? { ...n, acknowledged: true } : n
+      ),
     }))
   }, [])
 
