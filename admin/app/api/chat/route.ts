@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// IMPORTANT: ensure Node runtime (fs is not allowed in edge)
 export const runtime = "nodejs";
 export const maxDuration = 60; // 60 second timeout (Vercel Pro max)
 
@@ -34,7 +33,36 @@ export async function POST(req: NextRequest) {
     const body = JSON.parse(rawBody);
     console.log("Parsed body:", body);
     let message = body?.message;
-    const driverState = body?.driverState;
+    const driverState = body?.driverState; // "drowsy", "asleep", or "normal"
+    const conversationHistory = body?.conversationHistory || [];
+
+    // Handle asleep driver state
+    if (driverState === "asleep") {
+      console.log("DRIVER ASLEEP - Initiating emergency protocol");
+      
+      // 1. Play loud alarm sound only
+      const alarmFileName = `alarm-${Date.now()}.mp3`;
+      const tmpDir = os.tmpdir();
+      const alarmFilePath = path.join(tmpDir, alarmFileName);
+      
+      // Copy your downloaded alarm MP3 to temp directory
+      const alarmSourcePath = path.join(process.cwd(), "public", "sounds", "alarm.mp3");
+      if (fs.existsSync(alarmSourcePath)) {
+        fs.copyFileSync(alarmSourcePath, alarmFilePath);
+        console.log("Alarm file copied to:", alarmFilePath);
+      } else {
+        console.log("Warning: Alarm file not found at", alarmSourcePath);
+      }
+      
+      // 2. Return emergency response with alarm only
+      return NextResponse.json({
+        reply: "EMERGENCY: Driver asleep! Alarm activated and 911 has been called.",
+        audioUrl: `/api/play?file=${alarmFileName}`,
+        driverState: "emergency",
+        isEmergency: true,
+        nineOneOneCalled: true
+      });
+    }
 
     // Auto-start conversation when drowsiness is detected
     if (driverState === "drowsy" && (!message || message.trim() === "")) {
@@ -76,7 +104,7 @@ IMPORTANT:
         userMessage = `The driver just said: "${message}"`;
       }
     } else {
-      systemPrompt = `You are RoadBuddy, a friendly AI companion for truck drivers. The driver is currently ${driverState || "alert"}. Have a natural, engaging conversation. Keep responses SHORT (1-2 sentences max).`;
+      systemPrompt = `You are RoadBuddy, a friendly AI companion for truck drivers. The driver is currently ${driverState || "normal"}. Have a natural, engaging conversation. Keep responses SHORT (1-2 sentences max).`;
       userMessage = message;
     }
 
@@ -141,7 +169,6 @@ IMPORTANT:
     const filePath = path.join(tmpDir, fileName);
     console.log("Saving audio to:", filePath);
 
-    // Convert stream to buffer and save
     const chunks: Uint8Array[] = [];
     const reader = audioStream.getReader();
 
