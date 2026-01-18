@@ -21,7 +21,15 @@ export async function POST(req: NextRequest) {
 
     const body = JSON.parse(rawBody); // <-- manually parse
     console.log("Parsed body:", body);
-    const message = body?.message;
+    let message = body?.message;
+    const driverState = body?.driverState; // "drowsy", "alert", "distracted", etc.
+    const conversationHistory = body?.conversationHistory || []; // Optional: maintain context
+
+    // Auto-start conversation when drowsiness is detected
+    if (driverState === "drowsy" && (!message || message.trim() === "")) {
+      message = "initiate_drowsy_conversation";
+      console.log("Auto-starting drowsiness conversation");
+    }
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -30,12 +38,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // --- Build System Prompt based on driver state ---
+    let systemPrompt = "";
+    let userMessage = message;
+
+    if (driverState === "drowsy") {
+      systemPrompt = `You are RoadBuddy, an AI safety assistant for truck drivers. The driver is currently showing signs of DROWSINESS. Your role is to:
+
+1. Keep the driver alert and engaged through conversation
+2. Ask stimulating questions that require thoughtful responses
+3. Suggest safe actions (pull over, take a break, stretch, coffee)
+4. Use an energetic, friendly, and conversational tone
+5. Keep responses SHORT (1-2 sentences max) to maintain engagement
+6. Avoid yes/no questions - ask open-ended questions
+7. Be genuinely interested in their responses
+
+IMPORTANT:
+- Prioritize safety above all
+- If drowsiness persists, STRONGLY recommend pulling over
+- Keep the conversation natural and human-like
+- Act like a concerned friend, not a robot`;
+
+      // If this is an auto-initiated conversation, use a special prompt
+      if (message === "initiate_drowsy_conversation") {
+        userMessage = "The driver is showing signs of drowsiness. Start the conversation by gently alerting them that you've noticed they seem drowsy, then ask them an engaging question to keep them alert. Be friendly and concerned.";
+      } else {
+        userMessage = `The driver just said: "${message}"`;
+      }
+    } else {
+      systemPrompt = `You are RoadBuddy, a friendly AI companion for truck drivers. The driver is currently ${driverState || "alert"}. Have a natural, engaging conversation. Keep responses SHORT (1-2 sentences max).`;
+      userMessage = message;
+    }
+
     // --- Gemini API ---
     console.log("Calling Gemini API...");
+    console.log("Driver State:", driverState || "normal");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: systemPrompt
+    });
 
-    const result = await model.generateContent(message);
+    const result = await model.generateContent(userMessage);
     const response = await result.response;
     const replyText = response.text();
     console.log("Gemini response:", replyText.substring(0, 100) + "...");
